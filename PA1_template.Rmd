@@ -1,25 +1,98 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
 
+**Loading and preprocessing the data**
 
-## Loading and preprocessing the data
+```{r setoptions, echo=T, results='asis'}
+library(knitr)
+opts_chunk$set(echo=T)
+```
+```{r, Load the file into R and remove NAs}
+setwd("C:/Users/Sergey/Documents/R/coursera/Reproducible research/week 1 assign")
+url="http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, destfile="source.zip",mode="wb")
+source_file <- unzip("source.zip", files ="activity.csv")
+activity<-read.csv(source_file, sep=",",header=T)
+activity$date <- as.Date(activity$date, format= "%Y-%m-%d")
+act_noNA<-activity[(!is.na(activity$steps)),]
+```
+**What is mean total number of steps taken per day?**
+Histogramm for steps-by-day
+```{r calc steps by date}
+steps<-tapply(act_noNA$steps,act_noNA$date, sum, simplify=T)
+hist(steps, breaks=20)
+```
 
+*Mean, median and other stats for steps-by-day.*
 
+Mean=10770, median=10760
+```{r}
+summary(steps)
+```
+**What is the average daily activity pattern?**
+```{r histogramm}
+mean5min <- tapply(act_noNA$steps, act_noNA$interval,mean)
+plot(mean5min, type="l", xaxt="n", xlab="day interval", ylab= "mean of 5min inteval")
+axis(side=1,at=as.vector(1:length(mean5min)),labels=as.vector(names(mean5min)),
+     font=3)
+```
 
-## What is mean total number of steps taken per day?
+At 8.35 interval the mean amount of steps is maximum (206)
+```{r max mean val}
+mean5min[mean5min==max(mean5min)]
+```
+**Imputing missing values**
 
+Number of NA values
+```{r}
+sum(is.na(activity$steps))
+```
 
+New dataset is the original dataset with the missing data filled in
+```{r NA replacement}
+act_NArepl <- activity
+for (i in 1:length(act_NArepl$steps)) {
+    if (is.na(act_NArepl$steps[i])) {
+        act_NArepl$steps[i] <- 
+            mean(subset(activity$steps,activity$interval==act_NArepl$interval[i]),na.rm=T)
+    }
+}
+```
 
-## What is the average daily activity pattern?
+**Histogram of the total number of steps taken each day** 
 
+Mean and median values are identical for the chosen way of NAs imputing and equal 10766 steps per day. So this change t original data doesn't change mean and median values significantly.
+```{r}
+steps_filled<-tapply(act_NArepl$steps,act_NArepl$date, sum, simplify=T)
+plot(steps_filled,type="h", lwd=1)
+if (mean(steps_filled)==median(steps_filled)) {
+    abline(h=mean(steps_filled), lwd=2, col="grey30")
+    mtext("mean and median values are identical for the chosen way of NAs replacement", cex=0.8)
+} else {
+    abline(h=mean(steps_filled), lwd=2, col="grey30")
+    abline(h=median(steps_filled), lwd=2, col ="grey67")
+}
+```
 
+**Are there differences in activity patterns between weekdays and weekends?**
 
-## Imputing missing values
+New factor variable weekday_f. Aggregating by factor var and interval
+```{r aggregating by day and interval}
+install.packages("lubridate",repos="http://R-Forge.R-project.org")
+library(lubridate)
+weekday<-wday(act_NArepl$date, label=F)
+weekday_f<-NULL
+weekday_f[weekday==1|weekday==7]<-"weekend"
+weekday_f[weekday>1 & weekday < 7]<-"workday"
+act_wday <- cbind(act_NArepl,weekday_f)
+aggr_steps<-aggregate(steps~interval+weekday_f , data=act_wday, mean)
+```
 
+*There is a difference in activity pattern:*
 
+- during the workdays morning peak is pretty above 200 steps which is substantially higher than weekend value (~170 steps)
 
-## Are there differences in activity patterns between weekdays and weekends?
+- after the morning peak the activity level is higher during the weekend than during the workdays.
+```{r plotting weekdays vs workdays}
+library(lattice)
+xyplot(steps~interval|weekday_f,data=aggr_steps,type="l",layout=c(1,2),
+       groups=weekday_f, main="mean numb. of steps")
+```
